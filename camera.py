@@ -1,28 +1,33 @@
 import cv2
 from deepface import DeepFace
 import logging
-import os
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
-# Disable tqdm progress bars
-os.environ['TQDM_DISABLE'] = '1'
+class CameraEmotionDetector:
+    """Capture frames from webcam and detect emotions using DeepFace."""
 
-def get_emotion(frame):
-    try:
-        result = DeepFace.analyze(
-            frame,
-            actions=['emotion'],
-            enforce_detection=False,
-            silent=True,  # Disable all progress bars and warnings
-            detector_backend='opencv',  # Use OpenCV for faster detection
-            prog_bar=False  # Explicitly disable progress bar
-        )
-        emotion = result['dominant_emotion']
-        emotion_probs = result['emotion']
-        return emotion, emotion_probs
-    except Exception as e:
-        logger.debug(f"DeepFace error: {e}")
-        return None, None 
+    def __init__(self, camera_index: int = 0):
+        self.cap = cv2.VideoCapture(camera_index)
+        if not self.cap.isOpened():
+            raise RuntimeError("Failed to open camera")
+
+    def read_emotion(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            logger.warning("Failed to read frame from camera")
+            return None, None
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        try:
+            result = DeepFace.analyze(rgb_frame, actions=['emotion'], enforce_detection=False, silent=True)
+            emotion = result['dominant_emotion']
+            probs = result['emotion']
+            return emotion, probs
+        except Exception as e:
+            logger.debug(f"DeepFace error: {e}")
+            return None, None
+
+    def release(self):
+        self.cap.release()
+        cv2.destroyAllWindows()

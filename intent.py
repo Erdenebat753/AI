@@ -1,41 +1,42 @@
 import json
 import numpy as np
-import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 from rapidfuzz import fuzz as rfuzz
 
-# Load intents from intent.json
-with open('intent.json', 'r', encoding='utf-8') as f:
-    intents = json.load(f)
+class IntentRecognizer:
+    """Fuzzy intent recognizer."""
 
-# Fuzzy logic system for intent recognition
-word_match = ctrl.Antecedent(np.arange(0, 101, 1), 'word_match')
-intent_score = ctrl.Consequent(np.arange(0, 101, 1), 'intent_score')
+    def __init__(self, intent_path: str = 'intent.json'):
+        with open(intent_path, 'r', encoding='utf-8') as f:
+            self.intents = json.load(f)
+        self._build_system()
 
-word_match.automf(3)
-intent_score.automf(3)
+    def _build_system(self) -> None:
+        word_match = ctrl.Antecedent(np.arange(0, 101, 1), 'word_match')
+        intent_score = ctrl.Consequent(np.arange(0, 101, 1), 'intent_score')
+        word_match.automf(3)
+        intent_score.automf(3)
+        rules = [
+            ctrl.Rule(word_match['good'], intent_score['good']),
+            ctrl.Rule(word_match['average'], intent_score['average']),
+            ctrl.Rule(word_match['poor'], intent_score['poor'])
+        ]
+        intent_ctrl = ctrl.ControlSystem(rules)
+        self.simulator = ctrl.ControlSystemSimulation(intent_ctrl)
 
-rule1 = ctrl.Rule(word_match['good'], intent_score['good'])
-rule2 = ctrl.Rule(word_match['average'], intent_score['average'])
-rule3 = ctrl.Rule(word_match['poor'], intent_score['poor'])
+    def compute_scores(self, text: str):
+        text = text.strip().lower()
+        scores = []
+        for intent in self.intents:
+            max_kw_score = max(rfuzz.ratio(text, kw.lower()) for kw in intent['intent'])
+            self.simulator.input['word_match'] = max_kw_score
+            self.simulator.compute()
+            scores.append(self.simulator.output['intent_score'])
+        return scores
 
-intent_ctrl = ctrl.ControlSystem([rule1, rule2, rule3])
-intent_sim = ctrl.ControlSystemSimulation(intent_ctrl)
-
-def get_intent_scores(text):
-    text = text.strip().lower()
-    scores = []
-    for intent in intents:
-        max_keyword_score = max(rfuzz.ratio(text, kw.lower()) for kw in intent['intent'])
-        intent_sim.input['word_match'] = max_keyword_score
-        intent_sim.compute()
-        score = intent_sim.output['intent_score']
-        scores.append(score)
-    return scores
-
-def get_best_intent(scores):
-    best_score = max(scores)
-    if best_score > 60:
-        idx = scores.index(best_score)
-        return intents[idx]['name']
-    return 'unknown'
+    def best_intent(self, scores, threshold: float = 60.0) -> str:
+        best_score = max(scores)
+        if best_score > threshold:
+            idx = scores.index(best_score)
+            return self.intents[idx]['name']
+        return 'unknown'
