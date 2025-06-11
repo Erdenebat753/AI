@@ -53,8 +53,15 @@ def main() -> None:
             scores = intent_recognizer.compute_scores(text)
             selected = intent_recognizer.best_intent(scores)
             plotter.update(scores, selected, shared['emotion_probs'], shared['emotion'])
-            time.sleep(0.1)
-            expert.execute(selected, shared['emotion'])
+
+            if selected != 'unknown':
+                retries = 0
+                while retries < 3 and shared['emotion'] == 'neutral':
+                    time.sleep(1)
+                    retries += 1
+
+                expert.execute(selected, shared['emotion'])
+
     finally:
         shared['stop'] = True
         t.join()
